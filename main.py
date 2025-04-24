@@ -2,10 +2,14 @@ import cv2
 from ultralytics import YOLO
 from ultralytics import solutions
 
-model = YOLO("yolov8n.pt")
-cap = cv2.VideoCapture("data/traffic_video.mp4")
+from utils.utils import detect_traffic_light_color
 
-intersting_classes = ['motorcycle','car', 'bicycle', 'bus', 'truck', 'traffic light']
+
+
+model = YOLO("yolov8n.pt") 
+cap = cv2.VideoCapture("data/3440554941-preview.mp4")
+
+intersting_classes = ['motorcycle','car', 'bicycle', 'bus', 'truck', 'traffic light'] 
 
 w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -17,7 +21,13 @@ video_writer = cv2.VideoWriter("output.mp4",
                                cv2.VideoWriter_fourcc(*"mp4v"), 
                                fps, (w, h))
 
-vehicle_counter = 0; 
+counter = solutions.ObjectCounter(
+    show=True,  
+    region=region_points,  
+    model="yolov8n.pt",  
+    classes=[2],  
+    tracker="bytetrack.yaml",  
+)
 
 while True: 
 
@@ -50,11 +60,19 @@ while True:
 
                 cv2.putText(frame, f'{cls_name[cls]} {int(box.id.item())}', (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
 
+                if cls_name[cls] == "traffic light":
+
+                    print(int(box.id.item()))
+                    traffic_light_roi = frame[y1:y2, x1:x2]
+
+                    
+
+                    print(detect_traffic_light_color(traffic_light_roi))
+
     cv2.imshow("frames", frame)
 
     if cv2.waitKey(1)&0xFF==27:
         break
         
 cap.release()
-video_writer.release()
 cv2.destroyAllWindows()
