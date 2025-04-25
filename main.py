@@ -1,28 +1,34 @@
 import cv2
 from ultralytics import YOLO
-from utils.utils import detect_traffic_light_color
+import numpy as np 
+import csv
 
-# Carregar o modelo YOLO
-model = YOLO("yolov8n.pt")
+def detect_traffic_light_color(roi):
+    # Ajuste os valores conforme a posição real do semáforo no vídeo
 
-# Configurações do vídeo
-cap = cv2.VideoCapture("data/Sao_paulo_traffic.mp4")
-w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-fps = cap.get(cv2.CAP_PROP_FPS)
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-# Definição da região de contagem
-region_points = [(20, 400), (1080, 400)]
-line_y = h - 100  # Linha de contagem
+    # Máscaras para vermelho (em duas faixas no HSV)
+    lower_red1 = np.array([0, 70, 50])
+    upper_red1 = np.array([10, 255, 255])
+    lower_red2 = np.array([170, 70, 50])
+    upper_red2 = np.array([180, 255, 255])
+    red_mask = cv2.inRange(hsv, lower_red1, upper_red1) + cv2.inRange(hsv, lower_red2, upper_red2)
 
-# Inicialização de variáveis
-vehicle_counter = 0
-vehicles_centroids = {}
-prev_vehicles_centroids = {}
-already_counted = set()
+    # Máscara para verde
+    lower_green = np.array([40, 70, 50])
+    upper_green = np.array([90, 255, 255])
+    green_mask = cv2.inRange(hsv, lower_green, upper_green)
 
-# Configuração do gravador de vídeo de saída
-video_writer = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+    red_pixels = cv2.countNonZero(red_mask)
+    green_pixels = cv2.countNonZero(green_mask)
+
+    if red_pixels > green_pixels and red_pixels > 50:
+        return "red"
+    elif green_pixels > red_pixels and green_pixels > 50:
+        return "green"
+    else:
+        return "unknown"
 
 def update_centroids(bbox_id, x1, y1, x2, y2):
     """
@@ -86,6 +92,9 @@ def process_frame(frame):
                     vehicle_counter += 1
                     already_counted.add(bbox_id)
 
+                    # Tempo aproximado no vídeo
+                    tempo_em_segundos = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+
                 # Atualiza o histórico de centroides
                 prev_vehicles_centroids[bbox_id] = (cx, cy)
 
@@ -95,6 +104,25 @@ def process_frame(frame):
     cv2.putText(frame, f'Semaforo: {traffic_light_status}', (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 2)
 
     return frame
+
+# Carregar o modelo YOLO
+model = YOLO("yolov8n.pt")
+
+# Configurações do vídeo
+cap = cv2.VideoCapture("data/Sao_paulo_traffic.mp4")
+w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fps = cap.get(cv2.CAP_PROP_FPS)
+
+# Definição da região de contagem
+region_points = [(20, 400), (1080, 400)]
+line_y = h - 100  # Linha de contagem
+
+# Inicialização de variáveis
+vehicle_counter = 0
+vehicles_centroids = {}
+prev_vehicles_centroids = {}
+already_counted = set()
 
 # Loop de leitura de frames
 while True:
@@ -110,6 +138,7 @@ while True:
     # Permite sair do loop pressionando a tecla 'ESC'
     if cv2.waitKey(1) & 0xFF == 27:
         break
+
 
 # Libera os recursos
 cap.release()
